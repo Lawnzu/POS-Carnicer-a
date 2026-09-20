@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.dontoribio.pos.controller.MainPOSController">
+
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="20.0" styleClass="barra-superior">
+            <padding>
+                <Insets bottom="10.0" left="15.0" right="15.0" top="10.0" />
+            </padding>
+            <Label styleClass="titulo-barra" text="Don Toribio S.A.C. - POS" />
+            <Label fx:id="labelUsuarioActivo" styleClass="label-usuario" />
+        </HBox>
+    </top>
+
+    <left>
+        <VBox spacing="12.0" styleClass="panel-pesaje" prefWidth="280.0">
+            <padding>
+                <Insets bottom="15.0" left="15.0" right="15.0" top="15.0" />
+            </padding>
+
+            <Label styleClass="etiqueta-seccion" text="Visor de Pesaje" />
+            <Label fx:id="labelPesoActual" styleClass="label-peso" text="0.000 kg" />
+            <Label fx:id="labelImporteCalculado" styleClass="label-importe" text="S/ 0.00" />
+
+            <Label text="Producto:" />
+            <ComboBox fx:id="comboProducto" maxWidth="Infinity" />
+
+            <Label text="Tipo de cliente:" />
+            <ComboBox fx:id="comboTipoCliente" maxWidth="Infinity" />
+
+            <Button maxWidth="Infinity" onAction="#onAgregarPesajeALista"
+                    styleClass="boton-primario" text="Agregar a lista" />
+
+            <Label text="Metodo de pago:" />
+            <ComboBox fx:id="comboMetodoPago" maxWidth="Infinity" />
+
+            <Label fx:id="labelTotalLista" styleClass="label-total" text="Total: S/ 0.00" />
+
+            <Button maxWidth="Infinity" onAction="#onCobrarListaActiva"
+                    styleClass="boton-cobrar" text="Cobrar" />
+        </VBox>
+    </left>
+
+    <center>
+        <TabPane fx:id="tabPaneListas" tabClosingPolicy="UNAVAILABLE" />
+    </center>
+</BorderPane>
