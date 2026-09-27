@@ -47,6 +47,21 @@ public class ClienteDAOImpl implements ClienteDAO {
     }
 
     @Override
+    public Optional<Cliente> buscarPorNombre(String nombreRazonSocial) {
+        String sql = "SELECT id, tipo_cliente, nombre_razon_social, documento, telefono, direccion " +
+                "FROM clientes WHERE LOWER(nombre_razon_social) = LOWER(?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nombreRazonSocial);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapear(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al buscar cliente por nombre", e);
+        }
+    }
+
+    @Override
     public List<Cliente> listarTodos() {
         String sql = "SELECT id, tipo_cliente, nombre_razon_social, documento, telefono, direccion " +
                 "FROM clientes ORDER BY nombre_razon_social";

@@ -14,6 +14,8 @@ public interface ProductoDAO {
 
     List<Producto> listarActivos();
 
+    List<Producto> listarTodos();
+
     Producto guardar(Producto producto);
 
     void actualizar(Producto producto);

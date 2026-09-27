@@ -12,6 +12,8 @@ public interface ClienteDAO {
 
     Optional<Cliente> buscarPorDocumento(String documento);
 
+    Optional<Cliente> buscarPorNombre(String nombreRazonSocial);
+
     List<Cliente> listarTodos();
 
     Cliente guardar(Cliente cliente);

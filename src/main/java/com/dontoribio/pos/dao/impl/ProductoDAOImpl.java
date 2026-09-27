@@ -16,6 +16,19 @@ import java.util.Optional;
  */
 public class ProductoDAOImpl implements ProductoDAO {
 
+    /**
+     * Subconsulta que trae, por producto, el lote/fecha de produccion/fecha de vencimiento
+     * de la compra mas reciente registrada (dato informativo de solo lectura; se captura en
+     * el modulo de Compras, no aqui).
+     */
+    private static final String LOTE_ACTUAL =
+            "(SELECT dc.lote FROM detalle_compras dc JOIN compras c ON c.id = dc.compra_id " +
+            "WHERE dc.producto_id = productos.id ORDER BY c.fecha DESC, dc.id DESC LIMIT 1) AS lote_actual, " +
+            "(SELECT dc.fecha_produccion FROM detalle_compras dc JOIN compras c ON c.id = dc.compra_id " +
+            "WHERE dc.producto_id = productos.id ORDER BY c.fecha DESC, dc.id DESC LIMIT 1) AS fecha_produccion_actual, " +
+            "(SELECT dc.fecha_vencimiento FROM detalle_compras dc JOIN compras c ON c.id = dc.compra_id " +
+            "WHERE dc.producto_id = productos.id ORDER BY c.fecha DESC, dc.id DESC LIMIT 1) AS fecha_vencimiento_actual";
+
     @Override
     public Optional<Producto> buscarPorId(Long id) {
         String sql = "SELECT * FROM productos WHERE id = ?";
@@ -46,13 +59,13 @@ public class ProductoDAOImpl implements ProductoDAO {
 
     @Override
     public List<Producto> listarActivos() {
-        String sql = "SELECT * FROM productos WHERE activo = TRUE ORDER BY nombre";
+        String sql = "SELECT productos.*, " + LOTE_ACTUAL + " FROM productos WHERE activo = TRUE ORDER BY nombre";
         List<Producto> productos = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                productos.add(mapear(rs));
+                productos.add(mapearConLote(rs));
             }
         } catch (SQLException e) {
             throw new RuntimeException("Error al listar productos activos", e);
@@ -61,18 +74,35 @@ public class ProductoDAOImpl implements ProductoDAO {
     }
 
     @Override
+    public List<Producto> listarTodos() {
+        String sql = "SELECT productos.*, " + LOTE_ACTUAL + " FROM productos ORDER BY nombre";
+        List<Producto> productos = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                productos.add(mapearConLote(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al listar productos", e);
+        }
+        return productos;
+    }
+
+    @Override
     public Producto guardar(Producto producto) {
-        String sql = "INSERT INTO productos (codigo, nombre, precio_kg_minorista, precio_kg_mayorista, " +
-                "unidad_medida, stock_disponible, activo) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id";
+        String sql = "INSERT INTO productos (codigo, nombre, imagen_path, precio_kg_minorista, precio_kg_mayorista, " +
+                "unidad_medida, stock_disponible, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, producto.getCodigo());
             ps.setString(2, producto.getNombre());
-            ps.setBigDecimal(3, producto.getPrecioKgMinorista());
-            ps.setBigDecimal(4, producto.getPrecioKgMayorista());
-            ps.setString(5, producto.getUnidadMedida());
-            ps.setBigDecimal(6, producto.getStockDisponible());
-            ps.setBoolean(7, producto.isActivo());
+            ps.setString(3, producto.getImagenPath());
+            ps.setBigDecimal(4, producto.getPrecioKgMinorista());
+            ps.setBigDecimal(5, producto.getPrecioKgMayorista());
+            ps.setString(6, producto.getUnidadMedida());
+            ps.setBigDecimal(7, producto.getStockDisponible());
+            ps.setBoolean(8, producto.isActivo());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     producto.setId(rs.getLong("id"));
@@ -86,18 +116,19 @@ public class ProductoDAOImpl implements ProductoDAO {
 
     @Override
     public void actualizar(Producto producto) {
-        String sql = "UPDATE productos SET codigo = ?, nombre = ?, precio_kg_minorista = ?, " +
+        String sql = "UPDATE productos SET codigo = ?, nombre = ?, imagen_path = ?, precio_kg_minorista = ?, " +
                 "precio_kg_mayorista = ?, unidad_medida = ?, stock_disponible = ?, activo = ? WHERE id = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, producto.getCodigo());
             ps.setString(2, producto.getNombre());
-            ps.setBigDecimal(3, producto.getPrecioKgMinorista());
-            ps.setBigDecimal(4, producto.getPrecioKgMayorista());
-            ps.setString(5, producto.getUnidadMedida());
-            ps.setBigDecimal(6, producto.getStockDisponible());
-            ps.setBoolean(7, producto.isActivo());
-            ps.setLong(8, producto.getId());
+            ps.setString(3, producto.getImagenPath());
+            ps.setBigDecimal(4, producto.getPrecioKgMinorista());
+            ps.setBigDecimal(5, producto.getPrecioKgMayorista());
+            ps.setString(6, producto.getUnidadMedida());
+            ps.setBigDecimal(7, producto.getStockDisponible());
+            ps.setBoolean(8, producto.isActivo());
+            ps.setLong(9, producto.getId());
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Error al actualizar producto", e);
@@ -121,11 +152,22 @@ public class ProductoDAOImpl implements ProductoDAO {
         producto.setId(rs.getLong("id"));
         producto.setCodigo(rs.getString("codigo"));
         producto.setNombre(rs.getString("nombre"));
+        producto.setImagenPath(rs.getString("imagen_path"));
         producto.setPrecioKgMinorista(rs.getBigDecimal("precio_kg_minorista"));
         producto.setPrecioKgMayorista(rs.getBigDecimal("precio_kg_mayorista"));
         producto.setUnidadMedida(rs.getString("unidad_medida"));
         producto.setStockDisponible(rs.getBigDecimal("stock_disponible"));
         producto.setActivo(rs.getBoolean("activo"));
+        return producto;
+    }
+
+    private Producto mapearConLote(ResultSet rs) throws SQLException {
+        Producto producto = mapear(rs);
+        producto.setLoteActual(rs.getString("lote_actual"));
+        java.sql.Date fechaProduccion = rs.getDate("fecha_produccion_actual");
+        producto.setFechaProduccionActual(fechaProduccion == null ? null : fechaProduccion.toLocalDate());
+        java.sql.Date fechaVencimiento = rs.getDate("fecha_vencimiento_actual");
+        producto.setFechaVencimientoActual(fechaVencimiento == null ? null : fechaVencimiento.toLocalDate());
         return producto;
     }
 }

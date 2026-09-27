@@ -1,6 +1,7 @@
 package com.dontoribio.pos.model;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /** Producto carnico vendido por peso (kg). */
 public class Producto {
@@ -8,11 +9,18 @@ public class Producto {
     private Long id;
     private String codigo;
     private String nombre;
+    private String imagenPath;
     private BigDecimal precioKgMinorista;
     private BigDecimal precioKgMayorista;
     private String unidadMedida; // kg, g, unidad, etc.
     private BigDecimal stockDisponible;
     private boolean activo;
+
+    // Datos de trazabilidad de solo lectura: provienen de la ultima compra registrada
+    // para este producto (ver ProductoDAOImpl). No se editan desde el catalogo.
+    private String loteActual;
+    private LocalDate fechaProduccionActual;
+    private LocalDate fechaVencimientoActual;
 
     public Producto() {
     }
@@ -59,6 +67,14 @@ public class Producto {
         this.nombre = nombre;
     }
 
+    public String getImagenPath() {
+        return imagenPath;
+    }
+
+    public void setImagenPath(String imagenPath) {
+        this.imagenPath = imagenPath;
+    }
+
     public BigDecimal getPrecioKgMinorista() {
         return precioKgMinorista;
     }
@@ -97,6 +113,30 @@ public class Producto {
 
     public void setActivo(boolean activo) {
         this.activo = activo;
+    }
+
+    public String getLoteActual() {
+        return loteActual;
+    }
+
+    public void setLoteActual(String loteActual) {
+        this.loteActual = loteActual;
+    }
+
+    public LocalDate getFechaProduccionActual() {
+        return fechaProduccionActual;
+    }
+
+    public void setFechaProduccionActual(LocalDate fechaProduccionActual) {
+        this.fechaProduccionActual = fechaProduccionActual;
+    }
+
+    public LocalDate getFechaVencimientoActual() {
+        return fechaVencimientoActual;
+    }
+
+    public void setFechaVencimientoActual(LocalDate fechaVencimientoActual) {
+        this.fechaVencimientoActual = fechaVencimientoActual;
     }
 
     @Override

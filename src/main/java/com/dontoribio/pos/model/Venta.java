@@ -16,6 +16,8 @@ public class Venta {
     private List<Pago> pagos = new ArrayList<>();
     private BigDecimal subtotal = BigDecimal.ZERO;
     private BigDecimal total = BigDecimal.ZERO;
+    private TipoComprobante tipoComprobante = TipoComprobante.TICKET_SIMPLE;
+    private String documentoCliente;
 
     public Venta() {
     }
@@ -91,5 +93,27 @@ public class Venta {
 
     public BigDecimal getTotal() {
         return total;
+    }
+
+    /** Restaura subtotal/total ya persistidos al reconstruir una venta desde la BD (sin recalcular desde detalles). */
+    public void setTotalesPersistidos(BigDecimal subtotal, BigDecimal total) {
+        this.subtotal = subtotal;
+        this.total = total;
+    }
+
+    public TipoComprobante getTipoComprobante() {
+        return tipoComprobante;
+    }
+
+    public void setTipoComprobante(TipoComprobante tipoComprobante) {
+        this.tipoComprobante = tipoComprobante;
+    }
+
+    public String getDocumentoCliente() {
+        return documentoCliente;
+    }
+
+    public void setDocumentoCliente(String documentoCliente) {
+        this.documentoCliente = documentoCliente;
     }
 }

@@ -1,6 +1,7 @@
 package com.dontoribio.pos.model;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /** Linea de venta: un producto pesado dentro de una lista/cuenta de atencion. */
 public class DetalleVenta {
@@ -18,7 +19,7 @@ public class DetalleVenta {
         this.producto = producto;
         this.pesoKg = pesoKg;
         this.precioUnitario = precioUnitario;
-        this.importe = pesoKg.multiply(precioUnitario);
+        this.importe = pesoKg.multiply(precioUnitario).setScale(2, RoundingMode.HALF_UP);
     }
 
     public Long getId() {

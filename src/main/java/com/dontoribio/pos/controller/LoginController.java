@@ -42,14 +42,33 @@ public class LoginController {
             return;
         }
 
-        Optional<Usuario> usuarioOpt = usuarioDAO.buscarPorUsername(username);
-        if (usuarioOpt.isEmpty() || !usuarioOpt.get().isActivo()
-                || !PasswordUtil.verificarPassword(password, usuarioOpt.get().getPasswordHash())) {
+        Optional<Usuario> usuarioOpt;
+        try {
+            usuarioOpt = usuarioDAO.buscarPorUsername(username);
+        } catch (RuntimeException e) {
+            labelError.setText("No se pudo conectar con la base de datos");
+            return;
+        }
+
+        boolean credencialesValidas;
+        try {
+            credencialesValidas = usuarioOpt.isPresent() && usuarioOpt.get().isActivo()
+                    && PasswordUtil.verificarPassword(password, usuarioOpt.get().getPasswordHash());
+        } catch (IllegalArgumentException e) {
+            labelError.setText("El usuario tiene una contrasena mal configurada");
+            return;
+        }
+
+        if (!credencialesValidas) {
             labelError.setText("Usuario o contrasena incorrectos");
             return;
         }
 
         Usuario usuario = usuarioOpt.get();
-        MainApp.getInstance().mostrarPantallaPrincipal(usuario);
+        try {
+            MainApp.getInstance().mostrarPantallaPrincipal(usuario);
+        } catch (RuntimeException e) {
+            labelError.setText("No se pudo abrir el POS: " + e.getMessage());
+        }
     }
 }
