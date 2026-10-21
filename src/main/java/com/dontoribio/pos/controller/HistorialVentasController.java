@@ -14,15 +14,15 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.stream.Collectors;
 
-/** Controlador del historial de ventas del dia, con opcion para reimprimir el comprobante de cada venta. */
+/** Controlador del historial de ventas por rango de fechas, con opcion para reimprimir el comprobante de cada venta. */
 public class HistorialVentasController {
 
-    private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter FORMATO_FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
     @FXML
     private TableView<Venta> tablaVentas;
     @FXML
-    private TableColumn<Venta, String> colHora;
+    private TableColumn<Venta, String> colFechaHora;
     @FXML
     private TableColumn<Venta, String> colCliente;
     @FXML
@@ -35,13 +35,17 @@ public class HistorialVentasController {
     private TableColumn<Venta, Void> colVer;
     @FXML
     private Label labelResumen;
+    @FXML
+    private DatePicker datePickerDesde;
+    @FXML
+    private DatePicker datePickerHasta;
 
     private final VentaDAO ventaDAO = new VentaDAOImpl();
 
     @FXML
     private void initialize() {
-        colHora.setCellValueFactory(data ->
-                new javafx.beans.property.SimpleStringProperty(data.getValue().getFecha().format(FORMATO_HORA)));
+        colFechaHora.setCellValueFactory(data ->
+                new javafx.beans.property.SimpleStringProperty(data.getValue().getFecha().format(FORMATO_FECHA_HORA)));
         colCliente.setCellValueFactory(data ->
                 new javafx.beans.property.SimpleStringProperty(data.getValue().getCliente().getNombreRazonSocial()));
         colTotal.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(
@@ -68,14 +72,41 @@ public class HistorialVentasController {
             }
         });
 
-        cargarVentasDelDia();
+        datePickerDesde.setValue(LocalDate.now());
+        datePickerHasta.setValue(LocalDate.now());
+        cargarVentasDeRango(LocalDate.now(), LocalDate.now());
     }
 
-    private void cargarVentasDelDia() {
-        var ventas = ventaDAO.listarPorFecha(LocalDate.now());
+    @FXML
+    private void onBuscarRango() {
+        LocalDate desde = datePickerDesde.getValue();
+        LocalDate hasta = datePickerHasta.getValue();
+        if (desde == null || hasta == null) {
+            new Alert(Alert.AlertType.WARNING, "Seleccione la fecha de inicio y la fecha de fin").showAndWait();
+            return;
+        }
+        if (desde.isAfter(hasta)) {
+            new Alert(Alert.AlertType.WARNING, "La fecha de inicio no puede ser posterior a la fecha de fin").showAndWait();
+            return;
+        }
+        cargarVentasDeRango(desde, hasta);
+    }
+
+    @FXML
+    private void onIrAHoy() {
+        datePickerDesde.setValue(LocalDate.now());
+        datePickerHasta.setValue(LocalDate.now());
+        cargarVentasDeRango(LocalDate.now(), LocalDate.now());
+    }
+
+    private void cargarVentasDeRango(LocalDate desde, LocalDate hasta) {
+        var ventas = ventaDAO.listarPorRangoFechas(desde, hasta);
         tablaVentas.setItems(FXCollections.observableArrayList(ventas));
         var total = ventas.stream().map(Venta::getTotal).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
-        labelResumen.setText(ventas.size() + " venta(s) hoy - Total: S/ " + total.setScale(2, RoundingMode.HALF_UP));
+        String etiquetaPeriodo = desde.equals(hasta)
+                ? (desde.equals(LocalDate.now()) ? "hoy" : "el " + desde)
+                : "del " + desde + " al " + hasta;
+        labelResumen.setText(ventas.size() + " venta(s) " + etiquetaPeriodo + " - Total: S/ " + total.setScale(2, RoundingMode.HALF_UP));
     }
 
     private void verComprobante(Venta ventaResumen) {

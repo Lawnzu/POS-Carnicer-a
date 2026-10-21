@@ -17,6 +17,9 @@ public interface VentaDAO {
     /** Lista las ventas del dia con cliente, cajero y pagos cargados (para el historial de ventas). */
     List<Venta> listarPorFecha(LocalDate fecha);
 
+    /** Lista las ventas entre dos fechas (inclusive), con cliente, cajero y pagos cargados. */
+    List<Venta> listarPorRangoFechas(LocalDate desde, LocalDate hasta);
+
     /** Carga la venta completa (cliente, cajero, detalles con producto y pagos) para reimprimir su comprobante. */
     Optional<Venta> buscarVentaCompleta(Long id);
 }

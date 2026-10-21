@@ -32,6 +32,7 @@
             <HBox spacing="10.0" alignment="CENTER_LEFT">
                 <Label text="Producto:" />
                 <ComboBox fx:id="comboProducto" prefWidth="220.0" />
+                <Button onAction="#onNuevoProducto" text="Nuevo producto" />
                 <Label text="Peso/Cant (kg):" />
                 <TextField fx:id="campoPeso" prefWidth="80.0" />
                 <Label text="Costo/kg (S/):" />

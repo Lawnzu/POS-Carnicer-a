@@ -5,6 +5,8 @@ import com.dontoribio.pos.dao.CajaDAO;
 import com.dontoribio.pos.model.Caja;
 import com.dontoribio.pos.model.MetodoPago;
 import com.dontoribio.pos.model.Usuario;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -15,6 +17,8 @@ import java.util.Optional;
 
 /** Implementacion JDBC de {@link CajaDAO}. Esquema esperado: tabla caja, pagos, ventas. */
 public class CajaDAOImpl implements CajaDAO {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CajaDAOImpl.class);
 
     @Override
     public Caja abrirCaja(Caja caja) {
@@ -33,6 +37,7 @@ public class CajaDAOImpl implements CajaDAO {
             caja.setFechaApertura(fechaApertura);
             return caja;
         } catch (SQLException e) {
+            LOG.error("Error al abrir caja (usuario={})", caja.getUsuario() == null ? null : caja.getUsuario().getId(), e);
             throw new RuntimeException("Error al abrir caja", e);
         }
     }
@@ -58,6 +63,7 @@ public class CajaDAOImpl implements CajaDAO {
             caja.setUsuario(usuario);
             return Optional.of(caja);
         } catch (SQLException e) {
+            LOG.error("Error al buscar caja abierta (posible tabla 'caja' inexistente, revisar schema.sql)", e);
             throw new RuntimeException("Error al buscar caja abierta", e);
         }
     }

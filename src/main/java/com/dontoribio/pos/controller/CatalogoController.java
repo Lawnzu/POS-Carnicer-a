@@ -3,6 +3,8 @@ package com.dontoribio.pos.controller;
 import com.dontoribio.pos.dao.ProductoDAO;
 import com.dontoribio.pos.dao.impl.ProductoDAOImpl;
 import com.dontoribio.pos.model.Producto;
+import com.dontoribio.pos.model.Usuario;
+import com.dontoribio.pos.util.AutorizacionSupervisor;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -20,6 +22,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 
 /**
  * Controlador de la ventana de Catalogo/Inventario: alta, edicion y desactivacion
@@ -32,6 +36,7 @@ public class CatalogoController {
     private static final String FILTRO_INACTIVOS = "Inactivos";
     private static final DateTimeFormatter FORMATO_FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final Path CARPETA_IMAGENES_PRODUCTOS = Paths.get("img", "productos");
+    private static final long DIAS_ALERTA_VENCIMIENTO = 7;
 
     @FXML
     private TableView<Producto> tablaProductos;
@@ -53,6 +58,8 @@ public class CatalogoController {
     private TableColumn<Producto, LocalDate> colFechaVencimiento;
     @FXML
     private TableColumn<Producto, Boolean> colActivo;
+    @FXML
+    private TableColumn<Producto, LocalDate> colAlerta;
 
     @FXML
     private TextField campoBuscarProducto;
@@ -74,16 +81,24 @@ public class CatalogoController {
     @FXML
     private CheckBox checkActivo;
     @FXML
-    private Label labelLoteActual;
+    private TextField campoLote;
     @FXML
-    private Label labelFechaProduccionActual;
+    private DatePicker datePickerFechaProduccion;
     @FXML
-    private Label labelFechaVencimientoActual;
+    private DatePicker datePickerFechaVencimiento;
+    @FXML
+    private Button botonEditar;
 
     private final ProductoDAO productoDAO = new ProductoDAOImpl();
     private Producto productoSeleccionado;
     private ObservableList<Producto> productosBase;
     private FilteredList<Producto> productosFiltrados;
+    private Usuario usuarioSesion;
+
+    /** Recibe el usuario autenticado desde MainPOSController, para pedir autorizacion de supervisor si es cajero. */
+    public void setUsuarioSesion(Usuario usuario) {
+        this.usuarioSesion = usuario;
+    }
 
     @FXML
     private void initialize() {
@@ -121,13 +136,41 @@ public class CatalogoController {
 
         colActivo.setCellValueFactory(new PropertyValueFactory<>("activo"));
 
+        colAlerta.setCellValueFactory(new PropertyValueFactory<>("fechaVencimientoActual"));
+        colAlerta.setCellFactory(columna -> new TableCell<>() {
+            @Override
+            protected void updateItem(LocalDate fechaVencimiento, boolean vacio) {
+                super.updateItem(fechaVencimiento, vacio);
+                getStyleClass().removeAll("celda-alerta-vencido", "celda-alerta-proximo");
+                if (vacio || fechaVencimiento == null) {
+                    setText(null);
+                    return;
+                }
+                long diasRestantes = ChronoUnit.DAYS.between(LocalDate.now(), fechaVencimiento);
+                if (diasRestantes < 0) {
+                    setText("⚠ Vencido");
+                    getStyleClass().add("celda-alerta-vencido");
+                } else if (diasRestantes <= DIAS_ALERTA_VENCIMIENTO) {
+                    setText("⚠ Vence en " + diasRestantes + (diasRestantes == 1 ? " dia" : " dias"));
+                    getStyleClass().add("celda-alerta-proximo");
+                } else {
+                    setText(null);
+                }
+            }
+        });
+
         comboFiltroEstado.setItems(FXCollections.observableArrayList(FILTRO_TODOS, FILTRO_ACTIVOS, FILTRO_INACTIVOS));
         comboFiltroEstado.setValue(FILTRO_TODOS);
         comboFiltroEstado.setOnAction(e -> aplicarFiltros());
         campoBuscarProducto.textProperty().addListener((obs, anterior, nuevo) -> aplicarFiltros());
 
+        tablaProductos.getSelectionModel().selectedItemProperty().addListener((obs, anterior, nuevo) -> {
+            productoSeleccionado = nuevo;
+            botonEditar.setDisable(nuevo == null);
+        });
+
         cargarTabla();
-        onNuevoProducto();
+        limpiarFormulario();
     }
 
     private void aplicarFiltros() {
@@ -159,9 +202,9 @@ public class CatalogoController {
     }
 
     @FXML
-    private void onSeleccionarProducto() {
-        productoSeleccionado = tablaProductos.getSelectionModel().getSelectedItem();
+    private void onEditarProducto() {
         if (productoSeleccionado == null) {
+            new Alert(Alert.AlertType.WARNING, "Seleccione un producto de la tabla para editar").showAndWait();
             return;
         }
         campoCodigo.setText(productoSeleccionado.getCodigo());
@@ -172,15 +215,16 @@ public class CatalogoController {
         campoImagenPath.setText(productoSeleccionado.getImagenPath() == null ? "" : productoSeleccionado.getImagenPath());
         checkActivo.setSelected(productoSeleccionado.isActivo());
 
-        labelLoteActual.setText(productoSeleccionado.getLoteActual() == null ? "-" : productoSeleccionado.getLoteActual());
-        labelFechaProduccionActual.setText(productoSeleccionado.getFechaProduccionActual() == null
-                ? "-" : productoSeleccionado.getFechaProduccionActual().format(FORMATO_FECHA));
-        labelFechaVencimientoActual.setText(productoSeleccionado.getFechaVencimientoActual() == null
-                ? "-" : productoSeleccionado.getFechaVencimientoActual().format(FORMATO_FECHA));
+        campoLote.setText(productoSeleccionado.getLoteActual() == null ? "" : productoSeleccionado.getLoteActual());
+        datePickerFechaProduccion.setValue(productoSeleccionado.getFechaProduccionActual());
+        datePickerFechaVencimiento.setValue(productoSeleccionado.getFechaVencimientoActual());
+        campoLote.setDisable(false);
+        datePickerFechaProduccion.setDisable(false);
+        datePickerFechaVencimiento.setDisable(false);
     }
 
-    @FXML
-    private void onNuevoProducto() {
+    /** Deja la ficha en blanco, lista para registrar un producto nuevo. */
+    private void limpiarFormulario() {
         productoSeleccionado = null;
         tablaProductos.getSelectionModel().clearSelection();
         campoCodigo.clear();
@@ -190,9 +234,13 @@ public class CatalogoController {
         campoStock.setText("0");
         campoImagenPath.clear();
         checkActivo.setSelected(true);
-        labelLoteActual.setText("-");
-        labelFechaProduccionActual.setText("-");
-        labelFechaVencimientoActual.setText("-");
+        campoLote.clear();
+        datePickerFechaProduccion.setValue(null);
+        datePickerFechaVencimiento.setValue(null);
+        campoLote.setDisable(true);
+        datePickerFechaProduccion.setDisable(true);
+        datePickerFechaVencimiento.setDisable(true);
+        botonEditar.setDisable(true);
     }
 
     @FXML
@@ -230,6 +278,10 @@ public class CatalogoController {
 
     @FXML
     private void onGuardarProducto() {
+        if (!AutorizacionSupervisor.verificarPermiso(usuarioSesion, "modificar el catalogo de productos")) {
+            return;
+        }
+
         String codigo = campoCodigo.getText() == null ? "" : campoCodigo.getText().trim();
         String nombre = campoNombre.getText() == null ? "" : campoNombre.getText().trim();
         if (codigo.isEmpty() || nombre.isEmpty()) {
@@ -249,7 +301,8 @@ public class CatalogoController {
             return;
         }
 
-        Producto producto = productoSeleccionado != null ? productoSeleccionado : new Producto();
+        boolean editandoExistente = productoSeleccionado != null;
+        Producto producto = editandoExistente ? productoSeleccionado : new Producto();
         producto.setCodigo(codigo);
         producto.setNombre(nombre);
         producto.setPrecioKgMinorista(precioMinorista);
@@ -260,8 +313,20 @@ public class CatalogoController {
                 ? null : campoImagenPath.getText().trim());
         producto.setActivo(checkActivo.isSelected());
 
+        if (editandoExistente) {
+            Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Se guardaran los cambios del producto \"" + nombre + "\". Continuar?",
+                    ButtonType.OK, ButtonType.CANCEL);
+            confirmacion.setTitle("Editar producto");
+            confirmacion.setHeaderText(null);
+            Optional<ButtonType> respuesta = confirmacion.showAndWait();
+            if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
+                return;
+            }
+        }
+
         try {
-            if (productoSeleccionado != null) {
+            if (editandoExistente) {
                 productoDAO.actualizar(producto);
             } else {
                 productoDAO.guardar(producto);
@@ -271,20 +336,47 @@ public class CatalogoController {
             return;
         }
 
+        if (editandoExistente) {
+            String lote = campoLote.getText() == null || campoLote.getText().isBlank() ? null : campoLote.getText().trim();
+            boolean actualizado = productoDAO.actualizarTrazabilidad(producto.getId(), lote,
+                    datePickerFechaProduccion.getValue(), datePickerFechaVencimiento.getValue());
+            if (!actualizado) {
+                new Alert(Alert.AlertType.INFORMATION,
+                        "El producto se guardo, pero no tiene ninguna compra registrada: el lote y las fechas "
+                                + "no se pudieron guardar. Registre una compra para este producto primero.")
+                        .showAndWait();
+            }
+        }
+
         cargarTabla();
-        onNuevoProducto();
+        limpiarFormulario();
     }
 
     @FXML
     private void onDesactivarProducto() {
+        if (!AutorizacionSupervisor.verificarPermiso(usuarioSesion, "desactivar un producto del catalogo")) {
+            return;
+        }
         if (productoSeleccionado == null) {
             new Alert(Alert.AlertType.WARNING, "Seleccione un producto de la tabla").showAndWait();
             return;
         }
+
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION,
+                "Se desactivara el producto \"" + productoSeleccionado.getNombre() + "\". Ya no estara disponible "
+                        + "para la venta. Continuar?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmacion.setTitle("Desactivar producto");
+        confirmacion.setHeaderText(null);
+        Optional<ButtonType> respuesta = confirmacion.showAndWait();
+        if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
+            return;
+        }
+
         productoSeleccionado.setActivo(false);
         productoDAO.actualizar(productoSeleccionado);
         cargarTabla();
-        onNuevoProducto();
+        limpiarFormulario();
     }
 
     private BigDecimal parsearDecimal(String texto) {

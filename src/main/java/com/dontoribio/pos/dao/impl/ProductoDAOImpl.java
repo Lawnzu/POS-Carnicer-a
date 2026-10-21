@@ -5,6 +5,7 @@ import com.dontoribio.pos.dao.ProductoDAO;
 import com.dontoribio.pos.model.Producto;
 
 import java.sql.*;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -144,6 +145,23 @@ public class ProductoDAOImpl implements ProductoDAO {
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Error al eliminar producto", e);
+        }
+    }
+
+    @Override
+    public boolean actualizarTrazabilidad(Long productoId, String lote, LocalDate fechaProduccion, LocalDate fechaVencimiento) {
+        String sql = "UPDATE detalle_compras SET lote = ?, fecha_produccion = ?, fecha_vencimiento = ? " +
+                "WHERE id = (SELECT dc.id FROM detalle_compras dc JOIN compras c ON c.id = dc.compra_id " +
+                "WHERE dc.producto_id = ? ORDER BY c.fecha DESC, dc.id DESC LIMIT 1)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, lote);
+            ps.setDate(2, fechaProduccion == null ? null : Date.valueOf(fechaProduccion));
+            ps.setDate(3, fechaVencimiento == null ? null : Date.valueOf(fechaVencimiento));
+            ps.setLong(4, productoId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al actualizar trazabilidad del producto", e);
         }
     }
 

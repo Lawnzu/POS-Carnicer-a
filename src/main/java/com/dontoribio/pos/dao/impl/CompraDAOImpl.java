@@ -4,6 +4,8 @@ import com.dontoribio.pos.config.DatabaseConnection;
 import com.dontoribio.pos.dao.CompraDAO;
 import com.dontoribio.pos.model.Compra;
 import com.dontoribio.pos.model.DetalleCompra;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -14,6 +16,8 @@ import java.time.LocalDateTime;
  * Esquema esperado: compras, detalle_compras (FK compra_id), productos.stock_disponible.
  */
 public class CompraDAOImpl implements CompraDAO {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CompraDAOImpl.class);
 
     @Override
     public Compra registrarCompra(Compra compra) {
@@ -70,9 +74,11 @@ public class CompraDAOImpl implements CompraDAO {
                 return compra;
             } catch (SQLException e) {
                 conn.rollback();
+                LOG.error("Error al registrar compra, se revirtio la transaccion", e);
                 throw new RuntimeException("Error al registrar compra, se revirtio la transaccion", e);
             }
         } catch (SQLException e) {
+            LOG.error("Error de conexion al registrar compra", e);
             throw new RuntimeException("Error de conexion al registrar compra", e);
         }
     }

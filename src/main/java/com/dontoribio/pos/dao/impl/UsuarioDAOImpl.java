@@ -73,16 +73,30 @@ public class UsuarioDAOImpl implements UsuarioDAO {
 
     @Override
     public void actualizar(Usuario usuario) {
-        String sql = "UPDATE usuarios SET nombre_completo = ?, rol = ?, activo = ? WHERE id = ?";
+        String sql = "UPDATE usuarios SET username = ?, nombre_completo = ?, rol = ?, activo = ? WHERE id = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, usuario.getNombreCompleto());
-            ps.setString(2, usuario.getRol().name());
-            ps.setBoolean(3, usuario.isActivo());
-            ps.setLong(4, usuario.getId());
+            ps.setString(1, usuario.getUsername());
+            ps.setString(2, usuario.getNombreCompleto());
+            ps.setString(3, usuario.getRol().name());
+            ps.setBoolean(4, usuario.isActivo());
+            ps.setLong(5, usuario.getId());
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Error al actualizar usuario", e);
+        }
+    }
+
+    @Override
+    public void actualizarPassword(Long id, String nuevoPasswordHash) {
+        String sql = "UPDATE usuarios SET password_hash = ? WHERE id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nuevoPasswordHash);
+            ps.setLong(2, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al actualizar la contrasena del usuario", e);
         }
     }
 

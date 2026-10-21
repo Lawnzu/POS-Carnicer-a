@@ -4,6 +4,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DatePicker?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TableColumn?>
@@ -29,7 +30,7 @@
     </top>
 
     <center>
-        <TableView fx:id="tablaProductos" onMouseClicked="#onSeleccionarProducto">
+        <TableView fx:id="tablaProductos">
             <columns>
                 <TableColumn fx:id="colCodigo" text="Codigo" prefWidth="90.0" />
                 <TableColumn fx:id="colNombre" text="Nombre" prefWidth="200.0" />
@@ -40,6 +41,7 @@
                 <TableColumn fx:id="colFechaProduccion" text="Fecha produccion" prefWidth="110.0" />
                 <TableColumn fx:id="colFechaVencimiento" text="Fecha vencimiento" prefWidth="110.0" />
                 <TableColumn fx:id="colActivo" text="Activo" prefWidth="60.0" />
+                <TableColumn fx:id="colAlerta" text="Alerta" prefWidth="150.0" />
             </columns>
         </TableView>
     </center>
@@ -78,13 +80,15 @@
 
             <Label styleClass="etiqueta-seccion" text="Trazabilidad (ultima compra)" />
             <Label text="Lote:" />
-            <Label fx:id="labelLoteActual" text="-" />
+            <TextField fx:id="campoLote" />
             <Label text="Fecha de produccion:" />
-            <Label fx:id="labelFechaProduccionActual" text="-" />
+            <DatePicker fx:id="datePickerFechaProduccion" maxWidth="Infinity" />
             <Label text="Fecha de vencimiento:" />
-            <Label fx:id="labelFechaVencimientoActual" text="-" />
+            <DatePicker fx:id="datePickerFechaVencimiento" maxWidth="Infinity" />
+            <Label text="Si el producto no tiene compras registradas, estos datos no se podran guardar (registre una compra primero)."
+                   wrapText="true" />
 
-            <Button maxWidth="Infinity" onAction="#onNuevoProducto" text="Nuevo" />
+            <Button fx:id="botonEditar" maxWidth="Infinity" onAction="#onEditarProducto" text="Editar" />
             <Button maxWidth="Infinity" onAction="#onGuardarProducto" styleClass="boton-primario" text="Guardar" />
             <Button maxWidth="Infinity" onAction="#onDesactivarProducto" text="Desactivar" />
         </VBox>

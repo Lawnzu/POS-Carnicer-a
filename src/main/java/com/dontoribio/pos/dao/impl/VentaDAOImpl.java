@@ -3,6 +3,8 @@ package com.dontoribio.pos.dao.impl;
 import com.dontoribio.pos.config.DatabaseConnection;
 import com.dontoribio.pos.dao.VentaDAO;
 import com.dontoribio.pos.model.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -17,6 +19,8 @@ import java.util.Optional;
  * Esquema esperado: ventas, detalle_ventas, pagos (FK venta_id).
  */
 public class VentaDAOImpl implements VentaDAO {
+
+    private static final Logger LOG = LoggerFactory.getLogger(VentaDAOImpl.class);
 
     @Override
     public Venta registrarVenta(Venta venta) {
@@ -86,11 +90,16 @@ public class VentaDAOImpl implements VentaDAO {
             } catch (SQLException e) {
                 conn.rollback();
                 if (e.getSQLState() != null && e.getSQLState().equals("23514")) {
+                    LOG.warn("Venta rechazada por stock insuficiente (usuario={}, cliente={})",
+                            venta.getUsuario() == null ? null : venta.getUsuario().getId(),
+                            venta.getCliente() == null ? null : venta.getCliente().getId());
                     throw new IllegalStateException("Stock insuficiente para completar la venta", e);
                 }
+                LOG.error("Error al registrar venta, se revirtio la transaccion", e);
                 throw new RuntimeException("Error al registrar venta, se revirtio la transaccion", e);
             }
         } catch (SQLException e) {
+            LOG.error("Error de conexion al registrar venta", e);
             throw new RuntimeException("Error de conexion al registrar venta", e);
         }
     }
@@ -117,17 +126,23 @@ public class VentaDAOImpl implements VentaDAO {
 
     @Override
     public List<Venta> listarPorFecha(LocalDate fecha) {
+        return listarPorRangoFechas(fecha, fecha);
+    }
+
+    @Override
+    public List<Venta> listarPorRangoFechas(LocalDate desde, LocalDate hasta) {
         String sql = "SELECT v.id, v.fecha, v.subtotal, v.total, v.tipo_comprobante, v.documento_cliente, " +
                 "c.id AS cliente_id, c.nombre_razon_social AS cliente_nombre, c.tipo_cliente, " +
                 "u.id AS usuario_id, u.nombre_completo AS usuario_nombre, u.rol AS usuario_rol " +
                 "FROM ventas v " +
                 "JOIN clientes c ON c.id = v.cliente_id " +
                 "JOIN usuarios u ON u.id = v.usuario_id " +
-                "WHERE v.fecha::date = ? ORDER BY v.fecha DESC";
+                "WHERE v.fecha::date BETWEEN ? AND ? ORDER BY v.fecha DESC";
         List<Venta> ventas = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setDate(1, Date.valueOf(fecha));
+            ps.setDate(1, Date.valueOf(desde));
+            ps.setDate(2, Date.valueOf(hasta));
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Venta venta = mapearCabecera(rs);
@@ -150,7 +165,7 @@ public class VentaDAOImpl implements VentaDAO {
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Error al listar ventas por fecha", e);
+            throw new RuntimeException("Error al listar ventas por rango de fechas", e);
         }
         return ventas;
     }

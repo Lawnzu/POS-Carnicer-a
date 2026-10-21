@@ -10,9 +10,12 @@ import com.dontoribio.pos.model.*;
 import com.dontoribio.pos.service.TicketGeneratorService;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.GridPane;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -123,6 +126,85 @@ public class ComprasController {
     }
 
     @FXML
+    private void onNuevoProducto() {
+        Dialog<Void> dialogo = new Dialog<>();
+        dialogo.setTitle("Nuevo producto");
+        dialogo.setHeaderText(null);
+
+        ButtonType botonGuardar = new ButtonType("Guardar", ButtonBar.ButtonData.OK_DONE);
+        dialogo.getDialogPane().getButtonTypes().addAll(botonGuardar, ButtonType.CANCEL);
+
+        TextField campoCodigoNuevo = new TextField();
+        TextField campoNombreNuevo = new TextField();
+        TextField campoPrecioMinoristaNuevo = new TextField();
+        TextField campoPrecioMayoristaNuevo = new TextField();
+        TextField campoStockInicial = new TextField("0");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 10, 10, 10));
+        grid.addRow(0, new Label("Codigo:"), campoCodigoNuevo);
+        grid.addRow(1, new Label("Nombre:"), campoNombreNuevo);
+        grid.addRow(2, new Label("Precio/kg minorista (S/):"), campoPrecioMinoristaNuevo);
+        grid.addRow(3, new Label("Precio/kg mayorista (S/):"), campoPrecioMayoristaNuevo);
+        grid.addRow(4, new Label("Stock inicial (kg):"), campoStockInicial);
+        dialogo.getDialogPane().setContent(grid);
+
+        Producto[] productoCreado = new Producto[1];
+        Button botonGuardarNodo = (Button) dialogo.getDialogPane().lookupButton(botonGuardar);
+        botonGuardarNodo.addEventFilter(ActionEvent.ACTION, evento -> {
+            String codigo = campoCodigoNuevo.getText() == null ? "" : campoCodigoNuevo.getText().trim();
+            String nombre = campoNombreNuevo.getText() == null ? "" : campoNombreNuevo.getText().trim();
+            BigDecimal precioMinorista = parsearDecimal(campoPrecioMinoristaNuevo.getText());
+            BigDecimal precioMayorista = parsearDecimal(campoPrecioMayoristaNuevo.getText());
+            BigDecimal stockInicial = parsearDecimal(campoStockInicial.getText());
+
+            if (codigo.isEmpty() || nombre.isEmpty()) {
+                new Alert(Alert.AlertType.WARNING, "Ingrese codigo y nombre del producto").showAndWait();
+                evento.consume();
+                return;
+            }
+            if (precioMinorista == null || precioMayorista == null || stockInicial == null
+                    || precioMinorista.signum() < 0 || precioMayorista.signum() < 0 || stockInicial.signum() < 0) {
+                new Alert(Alert.AlertType.WARNING, "Precios y stock deben ser numeros validos y no negativos")
+                        .showAndWait();
+                evento.consume();
+                return;
+            }
+
+            Producto producto = new Producto();
+            producto.setCodigo(codigo);
+            producto.setNombre(nombre);
+            producto.setPrecioKgMinorista(precioMinorista);
+            producto.setPrecioKgMayorista(precioMayorista);
+            producto.setUnidadMedida("kg");
+            producto.setStockDisponible(stockInicial);
+            producto.setActivo(true);
+
+            try {
+                productoDAO.guardar(producto);
+            } catch (RuntimeException e) {
+                new Alert(Alert.AlertType.ERROR, "No se pudo guardar el producto: " + e.getMessage()).showAndWait();
+                evento.consume();
+                return;
+            }
+            productoCreado[0] = producto;
+        });
+
+        dialogo.showAndWait();
+        if (productoCreado[0] == null) {
+            return;
+        }
+
+        comboProducto.setItems(FXCollections.observableArrayList(productoDAO.listarActivos()));
+        comboProducto.getItems().stream()
+                .filter(p -> p.getId().equals(productoCreado[0].getId()))
+                .findFirst()
+                .ifPresent(comboProducto::setValue);
+    }
+
+    @FXML
     private void onAgregarDetalle() {
         Producto producto = comboProducto.getValue();
         BigDecimal peso = parsearDecimal(campoPeso.getText());
@@ -162,6 +244,17 @@ public class ComprasController {
             new Alert(Alert.AlertType.WARNING, "Seleccione un item de la tabla para eliminar").showAndWait();
             return;
         }
+
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION,
+                "Se eliminara \"" + seleccionado.getProducto().getNombre() + "\" de la lista de compra. Continuar?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmacion.setTitle("Eliminar item");
+        confirmacion.setHeaderText(null);
+        Optional<ButtonType> respuesta = confirmacion.showAndWait();
+        if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
+            return;
+        }
+
         detalles.remove(seleccionado);
         refrescarTabla();
     }

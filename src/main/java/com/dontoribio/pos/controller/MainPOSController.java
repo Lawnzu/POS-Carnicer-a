@@ -1,22 +1,23 @@
 package com.dontoribio.pos.controller;
 
-import com.dontoribio.pos.dao.CajaDAO;
-import com.dontoribio.pos.dao.ClienteDAO;
+import com.dontoribio.pos.MainApp;
+import com.dontoribio.pos.control.CampoPasswordVisible;
 import com.dontoribio.pos.dao.ProductoDAO;
-import com.dontoribio.pos.dao.VentaDAO;
-import com.dontoribio.pos.dao.impl.CajaDAOImpl;
-import com.dontoribio.pos.dao.impl.ClienteDAOImpl;
 import com.dontoribio.pos.dao.impl.ProductoDAOImpl;
-import com.dontoribio.pos.dao.impl.VentaDAOImpl;
 import com.dontoribio.pos.model.*;
 import com.dontoribio.pos.service.BalanzaSimuladaService;
+import com.dontoribio.pos.service.CajaService;
 import com.dontoribio.pos.service.IBalanzaService;
 import com.dontoribio.pos.service.TicketGeneratorService;
+import com.dontoribio.pos.service.UsuarioService;
+import com.dontoribio.pos.service.VentaService;
+import com.dontoribio.pos.util.AutorizacionSupervisor;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Insets;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -24,6 +25,7 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.TilePane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.io.File;
@@ -50,7 +52,6 @@ public class MainPOSController {
             "Brazo de Cerdo (Paleta)", "Pierna de Cerdo", "Cerdo Entero"
     );
 
-    private static final String DOCUMENTO_CLIENTE_GENERICO = "00000000";
     private static final Pattern SOLO_DIGITOS = Pattern.compile("\\d*");
 
     @FXML
@@ -87,9 +88,9 @@ public class MainPOSController {
     private TextField campoNombreCliente;
 
     private final ProductoDAO productoDAO = new ProductoDAOImpl();
-    private final VentaDAO ventaDAO = new VentaDAOImpl();
-    private final ClienteDAO clienteDAO = new ClienteDAOImpl();
-    private final CajaDAO cajaDAO = new CajaDAOImpl();
+    private final VentaService ventaService = new VentaService();
+    private final CajaService cajaService = new CajaService();
+    private final UsuarioService usuarioService = new UsuarioService();
     private final IBalanzaService balanzaService = new BalanzaSimuladaService();
 
     private final Map<Integer, ListaAtencion> listasAtencion = new HashMap<>();
@@ -98,7 +99,6 @@ public class MainPOSController {
     private Usuario usuarioSesion;
     private Caja cajaActual;
     private double pesoActualKg = 0.0;
-    private Cliente clienteGenerico;
     private ObservableList<Producto> productosBase;
     private FilteredList<Producto> productosFiltrados;
 
@@ -156,18 +156,14 @@ public class MainPOSController {
 
     /** Recupera la caja abierta del turno o solicita el monto inicial de efectivo para abrir una nueva. */
     private void verificarAperturaCaja() {
-        Optional<Caja> cajaAbierta = cajaDAO.buscarCajaAbierta();
+        Optional<Caja> cajaAbierta = cajaService.buscarCajaAbierta();
         if (cajaAbierta.isPresent()) {
             cajaActual = cajaAbierta.get();
             return;
         }
 
         BigDecimal montoInicial = solicitarMontoInicialCaja();
-
-        Caja caja = new Caja();
-        caja.setUsuario(usuarioSesion);
-        caja.setMontoInicial(montoInicial.setScale(2, RoundingMode.HALF_UP));
-        cajaActual = cajaDAO.abrirCaja(caja);
+        cajaActual = cajaService.abrirCaja(usuarioSesion, montoInicial);
     }
 
     /** Pide el monto inicial de caja hasta recibir un numero valido y no negativo, o 0 si el usuario cancela. */
@@ -192,38 +188,40 @@ public class MainPOSController {
     }
 
     @FXML
-    private void onCerrarCaja() {
-        if (cajaActual == null) {
-            new Alert(Alert.AlertType.WARNING, "No hay una caja abierta").showAndWait();
-            return;
+    private void onAbrirControlCaja() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/dontoribio/pos/view/control_caja.fxml"));
+            Parent root = loader.load();
+
+            ControlCajaController controller = loader.getController();
+            controller.setUsuarioSesion(usuarioSesion);
+            controller.setCajaActual(cajaActual);
+
+            Stage ventana = new Stage();
+            ventana.setTitle("Control de caja");
+            Scene scene = new Scene(root, 420, 560);
+            scene.getStylesheets().add(getClass().getResource("/com/dontoribio/pos/view/styles.css").toExternalForm());
+            ventana.setScene(scene);
+            ventana.setOnHidden(e -> cajaActual = controller.getCajaActual());
+            ventana.show();
+        } catch (IOException e) {
+            new Alert(Alert.AlertType.ERROR, "No se pudo abrir Control de caja: " + e.getMessage()).showAndWait();
         }
+    }
 
-        Map<MetodoPago, BigDecimal> resumen = cajaDAO.resumenVentasDesde(cajaActual.getFechaApertura());
-        BigDecimal totalVentas = BigDecimal.ZERO;
-        StringBuilder detalle = new StringBuilder();
-        detalle.append("Monto inicial: S/ ").append(cajaActual.getMontoInicial().setScale(2, RoundingMode.HALF_UP)).append('\n');
-        for (MetodoPago metodo : MetodoPago.values()) {
-            BigDecimal monto = resumen.getOrDefault(metodo, BigDecimal.ZERO);
-            totalVentas = totalVentas.add(monto);
-            detalle.append(metodo.name()).append(": S/ ").append(monto.setScale(2, RoundingMode.HALF_UP)).append('\n');
-        }
-        detalle.append("Total vendido: S/ ").append(totalVentas.setScale(2, RoundingMode.HALF_UP));
-
-        BigDecimal efectivoVendido = resumen.getOrDefault(MetodoPago.EFECTIVO, BigDecimal.ZERO);
-        BigDecimal montoFinal = cajaActual.getMontoInicial().add(efectivoVendido).setScale(2, RoundingMode.HALF_UP);
-        detalle.append("\nEfectivo esperado en caja: S/ ").append(montoFinal);
-
-        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION, detalle.toString(), ButtonType.OK, ButtonType.CANCEL);
-        confirmacion.setTitle("Cierre de caja");
-        confirmacion.setHeaderText("Resumen del turno");
+    @FXML
+    private void onCerrarSesion() {
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION,
+                "Se cerrara la sesion actual y volveras a la pantalla de inicio de sesion.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmacion.setTitle("Cerrar sesion");
+        confirmacion.setHeaderText("Confirmar cierre de sesion");
         Optional<ButtonType> respuesta = confirmacion.showAndWait();
         if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
             return;
         }
 
-        cajaDAO.cerrarCaja(cajaActual.getId(), LocalDateTime.now(), montoFinal);
-        cajaActual = null;
-        new Alert(Alert.AlertType.INFORMATION, "Caja cerrada correctamente").showAndWait();
+        MainApp.getInstance().mostrarPantallaLogin();
     }
 
     private void construirTabsMultilista() {
@@ -449,6 +447,16 @@ public class MainPOSController {
             return;
         }
 
+        Alert confirmacion = new Alert(Alert.AlertType.CONFIRMATION,
+                "Se eliminara \"" + seleccionado.getProducto().getNombre() + "\" de la Lista " + numeroListaActiva + ". Continuar?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirmacion.setTitle("Eliminar item");
+        confirmacion.setHeaderText(null);
+        Optional<ButtonType> respuesta = confirmacion.showAndWait();
+        if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
+            return;
+        }
+
         listasAtencion.get(numeroListaActiva).quitarItem(seleccionado);
         refrescarTablaLista(numeroListaActiva);
         actualizarTotalListaActiva();
@@ -489,26 +497,15 @@ public class MainPOSController {
         actualizarVuelto();
     }
 
-    /** Cliente por defecto ("Venta a publico") usado cuando la lista no tiene un cliente identificado. */
-    private Cliente obtenerClienteGenerico() {
-        if (clienteGenerico != null) {
-            return clienteGenerico;
-        }
-        Optional<Cliente> existente = clienteDAO.buscarPorDocumento(DOCUMENTO_CLIENTE_GENERICO);
-        if (existente.isPresent()) {
-            clienteGenerico = existente.get();
-            return clienteGenerico;
-        }
-        Cliente nuevo = new Cliente();
-        nuevo.setTipoCliente(TipoCliente.MINORISTA);
-        nuevo.setNombreRazonSocial("VTA PUBLICO");
-        nuevo.setDocumento(DOCUMENTO_CLIENTE_GENERICO);
-        clienteGenerico = clienteDAO.guardar(nuevo);
-        return clienteGenerico;
-    }
-
     @FXML
     private void onCobrarListaActiva() {
+        if (cajaActual == null) {
+            new Alert(Alert.AlertType.WARNING,
+                    "No hay una caja abierta. Abra una caja desde \"Control de caja\" antes de registrar ventas.")
+                    .showAndWait();
+            return;
+        }
+
         int numeroListaActiva = tabPaneListas.getSelectionModel().getSelectedIndex() + 1;
         ListaAtencion lista = listasAtencion.get(numeroListaActiva);
         MetodoPago metodoPago = comboMetodoPago.getValue();
@@ -550,18 +547,15 @@ public class MainPOSController {
             vuelto = BigDecimal.ZERO;
         }
 
-        lista.setCliente(resolverClienteDeLista());
+        String nombreCliente = campoNombreCliente.getText() == null ? "" : campoNombreCliente.getText().trim();
+        Cliente cliente = ventaService.resolverClientePorNombre(nombreCliente, comboTipoCliente.getValue());
+        lista.setCliente(cliente);
 
-        Venta venta = new Venta();
-        venta.setUsuario(usuarioSesion);
-        venta.setCliente(lista.getCliente());
-        venta.setTipoComprobante(tipoComprobante);
-        venta.setDocumentoCliente(documento.isEmpty() ? null : documento);
-        lista.getItems().forEach(venta::agregarDetalle);
-        venta.agregarPago(new Pago(metodoPago, venta.getTotal(), null));
+        Venta venta = ventaService.construirVenta(usuarioSesion, cliente, tipoComprobante,
+                documento.isEmpty() ? null : documento, lista.getItems(), metodoPago);
 
         try {
-            ventaDAO.registrarVenta(venta);
+            ventaService.registrarVenta(venta);
         } catch (IllegalStateException e) {
             new Alert(Alert.AlertType.ERROR, e.getMessage()).showAndWait();
             return;
@@ -580,21 +574,6 @@ public class MainPOSController {
 
         String ticket = TicketGeneratorService.generar(venta, usuarioSesion, montoRecibido, vuelto);
         TicketGeneratorService.mostrarVistaPrevia(ticket);
-    }
-
-    /** Resuelve el cliente de la venta a partir del nombre ingresado, o el cliente generico "VTA PUBLICO". */
-    private Cliente resolverClienteDeLista() {
-        String nombreCliente = campoNombreCliente.getText() == null ? "" : campoNombreCliente.getText().trim();
-        if (nombreCliente.isEmpty()) {
-            return obtenerClienteGenerico();
-        }
-        return clienteDAO.buscarPorNombre(nombreCliente).orElseGet(() -> {
-            Cliente nuevo = new Cliente();
-            nuevo.setNombreRazonSocial(nombreCliente);
-            TipoCliente tipo = comboTipoCliente.getValue();
-            nuevo.setTipoCliente(tipo != null ? tipo : TipoCliente.MINORISTA);
-            return clienteDAO.guardar(nuevo);
-        });
     }
 
     /** Recarga el catalogo desde la BD tras cerrar la ventana de Catalogo (precios/stock pudieron cambiar). */
@@ -616,7 +595,55 @@ public class MainPOSController {
 
     @FXML
     private void onAbrirHistorialVentas() {
-        abrirVentana("historial_ventas.fxml", "Historial de ventas del dia");
+        abrirVentana("historial_ventas.fxml", "Historial de ventas");
+    }
+
+    @FXML
+    private void onAbrirGestionUsuarios() {
+        if (!AutorizacionSupervisor.verificarPermiso(usuarioSesion, "gestionar usuarios")) {
+            return;
+        }
+        abrirVentana("gestion_usuarios.fxml", "Gestion de usuarios");
+    }
+
+    @FXML
+    private void onCambiarPassword() {
+        Dialog<ButtonType> dialogo = new Dialog<>();
+        dialogo.setTitle("Cambiar contrasena");
+        dialogo.setHeaderText("Cambiar contrasena de " + usuarioSesion.getNombreCompleto());
+        dialogo.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        CampoPasswordVisible campoActual = new CampoPasswordVisible();
+        campoActual.setPromptText("Contrasena actual");
+        CampoPasswordVisible campoNueva = new CampoPasswordVisible();
+        campoNueva.setPromptText("Nueva contrasena");
+        CampoPasswordVisible campoConfirmar = new CampoPasswordVisible();
+        campoConfirmar.setPromptText("Confirmar nueva contrasena");
+
+        VBox contenido = new VBox(8.0, campoActual, campoNueva, campoConfirmar);
+        contenido.setPadding(new Insets(10.0));
+        dialogo.getDialogPane().setContent(contenido);
+
+        Optional<ButtonType> respuesta = dialogo.showAndWait();
+        if (respuesta.isEmpty() || respuesta.get() != ButtonType.OK) {
+            return;
+        }
+
+        if (campoNueva.getText() == null || campoNueva.getText().length() < 6) {
+            new Alert(Alert.AlertType.WARNING, "La nueva contrasena debe tener al menos 6 caracteres").showAndWait();
+            return;
+        }
+        if (!campoNueva.getText().equals(campoConfirmar.getText())) {
+            new Alert(Alert.AlertType.WARNING, "Las contrasenas no coinciden").showAndWait();
+            return;
+        }
+
+        boolean actualizada = usuarioService.cambiarPasswordPropia(usuarioSesion, campoActual.getText(), campoNueva.getText());
+        if (!actualizada) {
+            new Alert(Alert.AlertType.ERROR, "La contrasena actual es incorrecta").showAndWait();
+            return;
+        }
+        new Alert(Alert.AlertType.INFORMATION, "Contrasena actualizada correctamente").showAndWait();
     }
 
     private void abrirVentana(String fxml, String titulo) {
@@ -626,6 +653,12 @@ public class MainPOSController {
 
             if (fxml.equals("compras.fxml")) {
                 ComprasController controller = loader.getController();
+                controller.setUsuarioSesion(usuarioSesion);
+            } else if (fxml.equals("catalogo.fxml")) {
+                CatalogoController controller = loader.getController();
+                controller.setUsuarioSesion(usuarioSesion);
+            } else if (fxml.equals("gestion_usuarios.fxml")) {
+                GestionUsuariosController controller = loader.getController();
                 controller.setUsuarioSesion(usuarioSesion);
             }
 

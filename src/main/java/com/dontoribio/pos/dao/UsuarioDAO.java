@@ -16,5 +16,7 @@ public interface UsuarioDAO {
 
     void actualizar(Usuario usuario);
 
+    void actualizarPassword(Long id, String nuevoPasswordHash);
+
     void eliminar(Long id);
 }
